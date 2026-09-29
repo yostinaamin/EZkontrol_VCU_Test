@@ -43,7 +43,7 @@
 CAN_HandleTypeDef hcan;
 
 /* USER CODE BEGIN PV */
-
+volatile uint32_t vcu_main_loop_alive = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -98,7 +98,7 @@ int main(void)
   while (1)
   {
       /* USER CODE BEGIN WHILE */
-
+      vcu_main_loop_alive++;
       EZK_CAN_Test_Task();
 
       /* USER CODE END WHILE */

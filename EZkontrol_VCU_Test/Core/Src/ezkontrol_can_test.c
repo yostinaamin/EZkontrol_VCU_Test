@@ -140,6 +140,21 @@ volatile uint8_t ez_merr_rs485          = 0;
 volatile uint8_t ez_merr_can            = 0;
 volatile uint8_t ez_merr_software       = 0;
 
+/* Diagnostics: CAN register state */
+volatile uint32_t ez_can_esr = 0;       /* Error Status Register */
+volatile uint32_t ez_can_tsr = 0;       /* Transmit Status Register */
+volatile uint32_t ez_can_rf1r = 0;      /* Receive FIFO 1 Register */
+volatile uint8_t  ez_can_rec = 0;       /* Receive Error Counter */
+volatile uint8_t  ez_can_tec = 0;       /* Transmit Error Counter */
+
+/* Diagnostics: Initialization status */
+volatile uint32_t ez_init_filter_result = 0;
+volatile uint32_t ez_init_start_result = 0;
+volatile uint32_t ez_init_notify_result = 0;
+
+/* Diagnostics: Main loop alive counter */
+volatile uint32_t ez_main_loop_alive = 0;
+
 /* Editable future RUN test values.
  * Manufacturer says target phase current and target speed should have same sign.
  * Examples: forward +50 (5.0A), +200rpm; reverse -50, -200rpm.
@@ -467,9 +482,15 @@ void EZK_CAN_Test_Init(void)
     f.FilterActivation = CAN_FILTER_ENABLE;
     f.SlaveStartFilterBank = 14;
 
-    if (HAL_CAN_ConfigFilter(&hcan, &f) != HAL_OK) Error_Handler();
-    if (HAL_CAN_Start(&hcan) != HAL_OK) Error_Handler();
-    if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO1_MSG_PENDING) != HAL_OK)
+    /* Record initialization results */
+    ez_init_filter_result = HAL_CAN_ConfigFilter(&hcan, &f);
+    if (ez_init_filter_result != HAL_OK) Error_Handler();
+
+    ez_init_start_result = HAL_CAN_Start(&hcan);
+    if (ez_init_start_result != HAL_OK) Error_Handler();
+
+    ez_init_notify_result = HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO1_MSG_PENDING);
+    if (ez_init_notify_result != HAL_OK)
         Error_Handler();
 
     last_command_tick = HAL_GetTick();
@@ -479,7 +500,18 @@ void EZK_CAN_Test_Task(void)
 {
     uint32_t now = HAL_GetTick();
 
+    ez_main_loop_alive++;
     ez_can_hal_error = HAL_CAN_GetError(&hcan);
+
+    /* Capture CAN register state for diagnostics */
+    if (hcan.Instance == CAN1)
+    {
+        ez_can_esr = hcan.Instance->ESR;
+        ez_can_tsr = hcan.Instance->TSR;
+        ez_can_rf1r = hcan.Instance->RF1R;
+        ez_can_rec = (ez_can_esr >> 24) & 0xFF;
+        ez_can_tec = (ez_can_esr >> 16) & 0xFF;
+    }
 
     if (!ez_handshake_established) return;
     if ((uint32_t)(now - last_command_tick) < EZK_COMMAND_PERIOD_MS) return;
